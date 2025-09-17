@@ -12,7 +12,7 @@ import {
 } from 'lucide-react'
 import { Card, CardContent, CardHeader } from '../components/ui/Card'
 import { useAuth } from '../hooks/useAuth'
-import { supabase } from '../lib/supabase'
+import { coursesAPI, assignmentsAPI } from '../lib/api'
 import { format, isToday, isTomorrow } from 'date-fns'
 import toast from 'react-hot-toast'
 
@@ -55,72 +55,61 @@ export function Dashboard() {
     try {
       setLoading(true)
 
-      // Fetch courses based on role
-      let coursesQuery = supabase.from('courses').select('id')
-      
+      // Fetch courses and assignments data
+      const { courses } = await coursesAPI.getCourses()
+      const { assignments } = await assignmentsAPI.getAssignments()
+
+      // Filter based on role
+      let userCourses = courses
+      let userAssignments = assignments
+
       if (profile.role === 'teacher') {
-        coursesQuery = coursesQuery.eq('teacher_id', profile.id)
+        // Teachers see their own courses and assignments
+        userCourses = courses.filter(course => 
+          typeof course.teacherId === 'string' ? 
+          course.teacherId === profile.id : 
+          course.teacherId.id === profile.id
+        )
+        userAssignments = assignments.filter(assignment => 
+          typeof assignment.createdBy === 'string' ? 
+          assignment.createdBy === profile.id : 
+          assignment.createdBy.id === profile.id
+        )
       } else {
-        // For students, we'd filter by enrollment. For now, we count all.
+        // Students see enrolled courses and published assignments
+        // For now, we'll show all active courses and published assignments
+        userCourses = courses.filter(course => course.isActive)
+        userAssignments = assignments.filter(assignment => assignment.status === 'published')
       }
 
-      const { data: courses, error: coursesError, count: courseCount } = await coursesQuery.limit(1000)
-      if (coursesError) throw coursesError
+      // Filter assignments for upcoming ones only
+      const upcomingAssignments = userAssignments.filter(assignment => 
+        new Date(assignment.dueDate) > new Date()
+      )
 
-      // Fetch assignments
-      let assignmentsQuery = supabase
-        .from('assignments')
-        .select('*, course:courses(title)')
-        .gte('due_date', new Date().toISOString())
-
-      if (profile.role === 'teacher' && courses) {
-        assignmentsQuery = assignmentsQuery.in('course_id', courses.map(c => c.id))
-      }
-
-      const { data: assignments, error: assignmentsError } = await assignmentsQuery
-      if (assignmentsError) throw assignmentsError
-
-      // Fetch live classes
-      const { data: liveClasses, error: classesError } = await supabase
-        .from('live_classes')
-        .select('*, course:courses(title)')
-        .gte('scheduled_at', new Date().toISOString())
-        .order('scheduled_at', { ascending: true })
-        .limit(5)
-
-      if (classesError) throw classesError
-
-      // Update stats
-      setStats({
-        totalCourses: courseCount || 0,
-        activeAssignments: assignments?.length || 0,
-        upcomingClasses: liveClasses?.length || 0,
-        teamMembers: 0 // Placeholder
-      })
-
-      // Create upcoming events
-      const events: UpcomingEvent[] = [
-        ...(assignments || []).map(a => ({
-          id: a.id,
-          title: a.title,
+      // Create upcoming events from assignments
+      const upcomingEvents: UpcomingEvent[] = upcomingAssignments
+        .slice(0, 5)
+        .map(assignment => ({
+          id: assignment.id,
+          title: assignment.title,
           type: 'assignment' as const,
-          time: a.due_date,
-          course: a.course?.title || 'Unknown Course'
-        })),
-        ...(liveClasses || []).map(l => ({
-          id: l.id,
-          title: l.title,
-          type: 'class' as const,
-          time: l.scheduled_at,
-          course: l.course?.title || 'Unknown Course'
+          time: assignment.dueDate,
+          course: typeof assignment.courseId === 'string' ? 'Course' : assignment.courseId.title || 'Course'
         }))
-      ].sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime()).slice(0, 5)
 
-      setUpcomingEvents(events)
+      setStats({
+        totalCourses: userCourses.length,
+        activeAssignments: upcomingAssignments.length,
+        upcomingClasses: 0, // No live classes in our simplified version
+        teamMembers: 0 // No teams in our simplified version
+      })
+      
+      setUpcomingEvents(upcomingEvents)
 
     } catch (error: any) {
       console.error('Error fetching dashboard data:', error)
-      toast.error('Failed to load dashboard data')
+      toast.error('Failed to load dashboard data.')
     } finally {
       setLoading(false)
     }

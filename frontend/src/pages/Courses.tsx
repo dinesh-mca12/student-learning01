@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Plus, Search, Users, BookOpen, Edit, Trash2 } from 'lucide-react'
+import { Plus, Search, BookOpen, Edit, Trash2 } from 'lucide-react'
 import { Card, CardContent } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
 import { Modal } from '../components/ui/Modal'
 import { useAuth } from '../hooks/useAuth'
-import { supabase, Course } from '../lib/supabase'
+import { Course, coursesAPI, CreateCourseData } from '../lib/api'
 import toast from 'react-hot-toast'
 import { faker } from '@faker-js/faker'
 
@@ -34,10 +34,7 @@ export function Courses() {
     if (!profile) return
     try {
       setLoading(true)
-      let query = supabase.from('courses').select('*, teacher:profiles(*)')
-      // No role-based filtering here to allow students to see all courses
-      const { data, error } = await query.order('created_at', { ascending: false })
-      if (error) throw error
+      const { courses: data } = await coursesAPI.getCourses()
       setCourses(data || [])
     } catch (error: any) {
       toast.error('Failed to load courses')
@@ -51,14 +48,19 @@ export function Courses() {
     if (!profile || profile.role !== 'teacher') return
     setIsSubmitting(true)
     try {
-      const { error } = await supabase.from('courses').insert([{ ...newCourse, teacher_id: profile.id }])
-      if (error) throw error
+      const courseData: CreateCourseData = {
+        title: newCourse.title,
+        description: newCourse.description,
+        courseCode: newCourse.code.toUpperCase()
+      }
+      await coursesAPI.createCourse(courseData)
       toast.success('Course created successfully!')
       setShowCreateModal(false)
       setNewCourse({ title: '', description: '', code: '' })
       fetchCourses()
     } catch (error: any) {
-      toast.error('Failed to create course')
+      const errorMessage = error.response?.data?.error || 'Failed to create course'
+      toast.error(errorMessage)
     } finally {
       setIsSubmitting(false)
     }
@@ -67,12 +69,12 @@ export function Courses() {
   const handleDeleteCourse = async (courseId: string) => {
     if (!confirm('Are you sure you want to delete this course? This action cannot be undone.')) return
     try {
-      const { error } = await supabase.from('courses').delete().eq('id', courseId)
-      if (error) throw error
+      await coursesAPI.deleteCourse(courseId)
       toast.success('Course deleted successfully!')
       setCourses(courses.filter(c => c.id !== courseId))
     } catch (error: any) {
-      toast.error('Failed to delete course. It might have associated assignments.')
+      const errorMessage = error.response?.data?.error || 'Failed to delete course. It might have associated assignments.'
+      toast.error(errorMessage)
     }
   }
   
@@ -81,22 +83,23 @@ export function Courses() {
     const sampleCourses = Array.from({ length: 3 }, () => ({
       title: faker.company.catchPhrase(),
       description: faker.lorem.paragraphs(2),
-      code: `${faker.lorem.word().substring(0,2).toUpperCase()}${faker.number.int({min: 100, max: 499})}`,
-      teacher_id: profile.id
+      courseCode: `${faker.lorem.word().substring(0,2).toUpperCase()}${faker.number.int({min: 100, max: 499})}`
     }))
     try {
-      const { error } = await supabase.from('courses').insert(sampleCourses)
-      if (error) throw error
+      for (const course of sampleCourses) {
+        await coursesAPI.createCourse(course)
+      }
       toast.success('Sample courses created!')
       fetchCourses()
     } catch (error: any) {
-      toast.error('Failed to create sample courses')
+      const errorMessage = error.response?.data?.error || 'Failed to create sample courses'
+      toast.error(errorMessage)
     }
   }
 
   const filteredCourses = courses.filter(course =>
     course.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    course.code.toLowerCase().includes(searchTerm.toLowerCase())
+    course.courseCode.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
   return (
@@ -150,7 +153,10 @@ export function Courses() {
                 <CardContent className="p-6 flex-1 flex flex-col">
                   <div className="flex items-start justify-between mb-4">
                     <div className="p-3 bg-blue-500/20 rounded-lg"><BookOpen size={24} className="text-blue-400" /></div>
-                    {profile?.id === course.teacher_id && (
+                    {profile && 
+                     (typeof course.teacherId === 'string' ? 
+                      profile.id === course.teacherId : 
+                      profile.id === course.teacherId.id) && (
                       <div className="flex space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button className="p-2 text-gray-400 hover:text-blue-400"><Edit size={16} /></button>
                         <button onClick={() => handleDeleteCourse(course.id)} className="p-2 text-gray-400 hover:text-red-400"><Trash2 size={16} /></button>
@@ -158,13 +164,13 @@ export function Courses() {
                     )}
                   </div>
                   <h3 className="text-xl font-semibold text-white mb-2">{course.title}</h3>
-                  <p className="text-sm text-blue-400 mb-3 font-mono">{course.code}</p>
+                  <p className="text-sm text-blue-400 mb-3 font-mono">{course.courseCode}</p>
                   <p className="text-gray-400 text-sm mb-4 line-clamp-3 flex-1">{course.description}</p>
-                  {course.teacher && (
+                  {typeof course.teacherId === 'object' && course.teacherId && (
                     <div className="flex items-center space-x-3 mb-4">
-                       <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-pink-600 rounded-full flex items-center justify-center"><span className="text-white text-sm font-medium">{course.teacher.full_name?.charAt(0) || 'T'}</span></div>
+                       <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-pink-600 rounded-full flex items-center justify-center"><span className="text-white text-sm font-medium">{course.teacherId.fullName?.charAt(0) || 'T'}</span></div>
                       <div>
-                        <p className="text-white text-sm font-medium">{course.teacher.full_name}</p>
+                        <p className="text-white text-sm font-medium">{course.teacherId.fullName}</p>
                         <p className="text-gray-400 text-xs">Instructor</p>
                       </div>
                     </div>
