@@ -1,7 +1,8 @@
 {
-  "name": "vite-react-typescript-starter",
+  "name": "student-learning-frontend",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "description": "Frontend for Student Learning Platform built with React, TypeScript, and Vite",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,10 +10,18 @@
     "lint": "eslint .",
     "preview": "vite preview"
   },
+  "keywords": [
+    "education",
+    "learning",
+    "react",
+    "typescript",
+    "vite"
+  ],
+  "author": "Student Learning Team",
+  "license": "MIT",
   "dependencies": {
     "@faker-js/faker": "^10.0.0",
     "@hookform/resolvers": "^5.2.2",
-    "@supabase/supabase-js": "^2.57.4",
     "axios": "^1.9.0",
     "date-fns": "^4.1.0",
     "framer-motion": "^12.23.13",
@@ -39,5 +48,8 @@
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.32.1",
     "vite": "^6.3.5"
+  },
+  "engines": {
+    "node": ">=16.0.0"
   }
 }

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { supabase, Course, Assignment } from '../lib/supabase'
+import { Course, Assignment, coursesAPI, assignmentsAPI } from '../lib/api'
 import { LoadingSpinner } from '../components/ui/LoadingSpinner'
 import { Card, CardContent, CardHeader } from '../components/ui/Card'
 import { BookOpen, FileText, Video, ArrowLeft } from 'lucide-react'
@@ -26,26 +26,14 @@ export function CourseDetail() {
       setLoading(true)
 
       // Fetch course details
-      const { data: courseData, error: courseError } = await supabase
-        .from('courses')
-        .select('*, teacher:profiles(*)')
-        .eq('id', courseId)
-        .single()
-
-      if (courseError) throw courseError
+      const courseData = await coursesAPI.getCourse(courseId)
       setCourse(courseData)
 
       // Fetch assignments for the course
-      const { data: assignmentsData, error: assignmentsError } = await supabase
-        .from('assignments')
-        .select('*')
-        .eq('course_id', courseId)
-        .order('due_date', { ascending: true })
-
-      if (assignmentsError) throw assignmentsError
+      const { assignments: assignmentsData } = await assignmentsAPI.getAssignments({ course: courseId })
       setAssignments(assignmentsData)
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching course details:', error)
       toast.error('Failed to load course details.')
     } finally {
@@ -112,7 +100,7 @@ export function CourseDetail() {
                     <li key={assignment.id} className="flex justify-between items-center p-3 bg-gray-700/50 rounded-lg">
                       <div>
                         <p className="text-white font-medium">{assignment.title}</p>
-                        <p className="text-sm text-gray-400">Due: {format(new Date(assignment.due_date), 'MMM d, yyyy')}</p>
+                        <p className="text-sm text-gray-400">Due: {format(new Date(assignment.dueDate), 'MMM d, yyyy')}</p>
                       </div>
                       <Link to="/assignments" className="text-blue-400 text-sm hover:underline">View</Link>
                     </li>
@@ -131,15 +119,15 @@ export function CourseDetail() {
               <h2 className="text-xl font-semibold text-white">Instructor</h2>
             </CardHeader>
             <CardContent>
-              {course.teacher && (
+              {typeof course.teacherId === 'object' && course.teacherId && (
                 <div className="flex items-center space-x-3">
                   <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-pink-600 rounded-full flex items-center justify-center">
                     <span className="text-white text-xl font-medium">
-                      {course.teacher.full_name?.charAt(0) || 'T'}
+                      {course.teacherId.fullName?.charAt(0) || 'T'}
                     </span>
                   </div>
                   <div>
-                    <p className="text-white font-medium">{course.teacher.full_name}</p>
+                    <p className="text-white font-medium">{course.teacherId.fullName}</p>
                     <p className="text-gray-400 text-sm">Instructor</p>
                   </div>
                 </div>

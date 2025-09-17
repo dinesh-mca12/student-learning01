@@ -5,8 +5,8 @@ import { Card, CardContent } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
 import { useAuth } from '../hooks/useAuth'
-import { supabase } from '../lib/supabase'
-import toast from 'react-hot-toast'
+// Removed toast import since it's not used
+// import toast from 'react-hot-toast'
 
 interface ChatMessage {
   id: string
@@ -86,18 +86,8 @@ export function Chatbot() {
     setCurrentMessage('')
     setIsTyping(true)
 
-    // Save conversation to database
-    try {
-      await supabase
-        .from('chatbot_conversations')
-        .insert([{
-          user_id: profile?.id,
-          question: currentMessage,
-          answer: '' // Will be updated with bot response
-        }])
-    } catch (error) {
-      console.error('Error saving conversation:', error)
-    }
+    // For now, we'll just simulate AI responses
+    // In a real implementation, this would call an AI service
 
     // Simulate typing delay
     setTimeout(() => {
