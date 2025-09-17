@@ -7,11 +7,44 @@ import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
 import { Modal } from '../components/ui/Modal'
 import { useAuth } from '../hooks/useAuth'
-import { supabase, Assignment, Submission, Course } from '../lib/supabase'
+import { assignmentAPI, courseAPI } from '../lib/api'
 import { format, isBefore } from 'date-fns'
 import toast from 'react-hot-toast'
-import { faker } from '@faker-js/faker'
 import { LoadingSpinner } from '../components/ui/LoadingSpinner'
+
+interface Course {
+  id: string
+  title: string
+  code: string
+}
+
+interface Assignment {
+  id: string
+  title: string
+  description: string
+  instructions?: string
+  course: Course
+  dueDate: string
+  totalPoints: number
+  status: string
+  submission?: any
+  isSubmitted?: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+interface Submission {
+  id: string
+  content: string
+  submittedAt: string
+  grade?: number
+  feedback?: string
+  status: string
+  student: {
+    fullName: string
+    email: string
+  }
+}
 
 export function Assignments() {
   const { profile } = useAuth()
@@ -46,23 +79,33 @@ export function Assignments() {
 
   const fetchData = async () => {
     if (!profile) return
-    setLoading(true)
+    
     try {
+      setLoading(true)
+      
       if (profile.role === 'teacher') {
-        const { data: coursesData } = await supabase.from('courses').select('*').eq('teacher_id', profile.id)
-        setTeacherCourses(coursesData || [])
-        if (coursesData && coursesData.length > 0) {
-          const { data: assignmentsData } = await supabase.from('assignments').select('*, course:courses(title)').in('course_id', coursesData.map(c => c.id)).order('due_date', { ascending: true })
-          setAssignments(assignmentsData || [])
+        // Fetch teacher's courses for assignment creation
+        const coursesResponse = await courseAPI.getCourses({ my_courses: 'true' })
+        if (coursesResponse.success) {
+          setTeacherCourses(coursesResponse.data.courses || [])
+        }
+        
+        // Fetch teacher's assignments
+        const assignmentsResponse = await assignmentAPI.getAssignments({ my_assignments: 'true' })
+        if (assignmentsResponse.success) {
+          setAssignments(assignmentsResponse.data.assignments || [])
         }
       } else {
-        const { data: assignmentsData } = await supabase.from('assignments').select('*, course:courses(title)').order('due_date', { ascending: true })
-        setAssignments(assignmentsData || [])
-        const { data: submissionsData } = await supabase.from('submissions').select('*').eq('student_id', profile.id)
-        setSubmissions(submissionsData || [])
+        // Fetch student's assignments
+        const assignmentsResponse = await assignmentAPI.getAssignments()
+        if (assignmentsResponse.success) {
+          setAssignments(assignmentsResponse.data.assignments || [])
+        }
       }
-    } catch (error) {
-      toast.error('Failed to load data.')
+    } catch (error: any) {
+      console.error('Error fetching data:', error)
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to load data'
+      toast.error(errorMessage)
     } finally {
       setLoading(false)
     }
@@ -74,16 +117,31 @@ export function Assignments() {
       toast.error('Please select a course.')
       return
     }
+    
     setIsSubmitting(true)
     try {
-      const { error } = await supabase.from('assignments').insert([newAssignment])
-      if (error) throw error
-      toast.success('Assignment created!')
-      setShowCreateModal(false)
-      setNewAssignment({ title: '', description: '', due_date: '', max_points: 100, course_id: '' })
-      fetchData()
+      const assignmentData = {
+        title: newAssignment.title,
+        description: newAssignment.description,
+        course_id: newAssignment.course_id,
+        dueDate: new Date(newAssignment.due_date).toISOString(),
+        totalPoints: newAssignment.max_points
+      }
+      
+      const response = await assignmentAPI.createAssignment(assignmentData)
+      
+      if (response.success) {
+        toast.success('Assignment created!')
+        setShowCreateModal(false)
+        setNewAssignment({ title: '', description: '', due_date: '', max_points: 100, course_id: '' })
+        fetchData()
+      } else {
+        toast.error(response.message || 'Failed to create assignment')
+      }
     } catch (error: any) {
-      toast.error(error.message)
+      console.error('Error creating assignment:', error)
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to create assignment'
+      toast.error(errorMessage)
     } finally {
       setIsSubmitting(false)
     }

@@ -1,24 +1,25 @@
 import express from 'express';
 import { protect, authorize } from '../middleware/auth.js';
+import {
+  getAssignments,
+  createAssignment,
+  submitAssignment,
+  getAssignmentSubmissions,
+  gradeSubmission,
+  validateCreateAssignment
+} from '../controllers/assignmentController.js';
 
 const router = express.Router();
 
-// Placeholder routes
-router.get('/', (req, res) => {
-  res.json({
-    success: true,
-    message: 'Assignment routes are ready for implementation',
-    availableEndpoints: [
-      'GET /api/assignments - Get assignments',
-      'POST /api/assignments - Create assignment (teacher only)',
-      'GET /api/assignments/:id - Get assignment by ID',
-      'PUT /api/assignments/:id - Update assignment (teacher only)',
-      'DELETE /api/assignments/:id - Delete assignment (teacher only)',
-      'POST /api/assignments/:id/submit - Submit assignment (student only)',
-      'GET /api/assignments/:id/submissions - Get submissions (teacher only)',
-      'PUT /api/assignments/:id/submissions/:submissionId/grade - Grade submission (teacher only)'
-    ]
-  });
-});
+// Protected routes - all assignment routes require authentication
+router.get('/', protect, getAssignments);
+
+// Teacher-only routes
+router.post('/', protect, authorize('teacher'), validateCreateAssignment, createAssignment);
+router.get('/:id/submissions', protect, authorize('teacher'), getAssignmentSubmissions);
+router.put('/:id/submissions/:submissionId/grade', protect, authorize('teacher'), gradeSubmission);
+
+// Student-only routes
+router.post('/:id/submit', protect, authorize('student'), submitAssignment);
 
 export default router;

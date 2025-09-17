@@ -5,7 +5,7 @@ import { Card, CardContent } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
 import { useAuth } from '../hooks/useAuth'
-import { supabase } from '../lib/supabase'
+import { chatbotAPI } from '../lib/api'
 import toast from 'react-hot-toast'
 
 interface ChatMessage {
@@ -83,25 +83,34 @@ export function Chatbot() {
     }
 
     setMessages(prev => [...prev, userMessage])
+    const questionText = currentMessage
     setCurrentMessage('')
     setIsTyping(true)
 
-    // Save conversation to database
     try {
-      await supabase
-        .from('chatbot_conversations')
-        .insert([{
-          user_id: profile?.id,
-          question: currentMessage,
-          answer: '' // Will be updated with bot response
-        }])
-    } catch (error) {
-      console.error('Error saving conversation:', error)
-    }
+      // Call the backend chatbot API
+      const response = await chatbotAPI.askQuestion({
+        question: questionText,
+        sessionId: profile?.id // Use user ID as session ID
+      })
 
-    // Simulate typing delay
-    setTimeout(() => {
-      const botResponse = simulateBotResponse(currentMessage)
+      if (response.success) {
+        const botMessage: ChatMessage = {
+          id: response.data.conversation.id,
+          type: 'bot',
+          content: response.data.conversation.answer,
+          timestamp: new Date(response.data.conversation.createdAt)
+        }
+
+        setMessages(prev => [...prev, botMessage])
+      } else {
+        throw new Error(response.message || 'Failed to get response')
+      }
+    } catch (error: any) {
+      console.error('Error getting chatbot response:', error)
+      
+      // Fallback to client-side response
+      const botResponse = simulateBotResponse(questionText)
       const botMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
         type: 'bot',
@@ -110,8 +119,9 @@ export function Chatbot() {
       }
 
       setMessages(prev => [...prev, botMessage])
+    } finally {
       setIsTyping(false)
-    }, 1000 + Math.random() * 1000) // Random delay between 1-2 seconds
+    }
   }
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
